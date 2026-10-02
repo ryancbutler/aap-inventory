@@ -24,7 +24,7 @@ scaling diagram, and pros and cons in its README.
 | Per-cluster access control | no | yes, through **Use** on each inventory | no | yes, through **Use** on each constructed inventory |
 | Removed host | not returned on the next run | deleted on the next sync | deleted on the next sync | deleted on the next scheduled sync |
 | New cluster | works right away | rerun the setup playbook | works after the next sync | rerun the setup playbook |
-| Unknown cluster | job succeeds with no hosts | no inventory to select, so nothing launches | job fails: limit matches no hosts | no inventory to select, so nothing launches |
+| Unknown cluster | job fails: `not found` | no inventory to select, so nothing launches | job fails: limit matches no hosts | no inventory to select, so nothing launches |
 | Forgot to pick a cluster | job fails: `Set cluster_name` | runs on the template's default inventory | job fails: playbook requires a limit | runs on the template's default inventory |
 | Cluster API down | job fails | sync fails or, with a script that hides errors, empties the inventory | sync fails or, with a script that hides errors, empties the inventory | sync fails and the last good hosts are kept |
 | Extra AAP credential | none | AAP credential for the setup playbook | none | AAP credential for the setup playbook |
@@ -32,7 +32,10 @@ scaling diagram, and pros and cons in its README.
 
 **Which to pick**
 - **runtime/** if you want the fewest AAP objects and always-current data,
-  and don't need to browse hosts in AAP.
+  and don't need to browse hosts in AAP. It's also the one to use when a
+  pipeline builds a cluster (for example with Terraform) and configures it
+  in the same run, because it's the only approach that sees a brand-new
+  cluster with no AAP changes and no sync delay.
 - **inventory-level/** if different teams own different clusters and must
   only be able to run against their own.
 - **limit/** if you want hosts browsable in AAP without one inventory per
@@ -60,13 +63,14 @@ POST /api/controller/v2/job_templates/<runtime-cluster>/launch/
 3. Play 1 runs `dynamic_inventory.py --list` with `INV_CLUSTER=cobalt`. The
    script asks the cluster API for cobalt only.
 4. The script returns cobalt's 4 hosts. If cobalt doesn't exist, it returns
-   nothing, the job reports `Cluster cobalt not found` and succeeds without
-   doing anything.
+   nothing and the job fails with `Cluster cobalt not found in the cluster
+   API`.
 5. `add_host` adds `cobalt-fe01`, `cobalt-fe02`, `cobalt-app01` and
    `cobalt-db01` to the job's in-memory inventory, in groups
    `target_cluster` and `frontend`, `app` or `db`.
-6. **Play 2** targets `target_cluster:&frontend` and runs on `cobalt-fe01`
-   and `cobalt-fe02`.
+6. **Play 2** targets `target_cluster:&frontend`. It waits for `cobalt-fe01`
+   and `cobalt-fe02` to accept connections, up to `connect_timeout` seconds,
+   then runs on them.
 7. The job ends and the added hosts are gone. The next launch asks the API
    again.
 

@@ -55,6 +55,9 @@ flowchart LR
   never needs changing.
 - Each job fetches only the cluster it needs.
 - Callers pass a plain cluster name. They don't need to look up an ID.
+- Fits pipelines that build a cluster and configure it in one run, such as
+  `terraform apply` followed by a launch. The new cluster's hosts are loaded
+  at job start, and play 2 waits for VMs that are still booting.
 
 **Cons**
 - Hosts never appear in an AAP inventory, so you can't browse them in the UI.
@@ -64,8 +67,9 @@ flowchart LR
 - Every playbook that wants this needs the loader play (play 1) in front of
   it, or an `import_playbook` of it.
 - Every job depends on the cluster API being up. If it's down, the job fails.
-- A mistyped cluster name succeeds with no hosts by default. See
-  [Launch results](#launch-results) to make it fail instead.
+- Only as current as the cluster API. If something other than the process
+  that builds the VMs registers them in the API, launch only after they're
+  registered.
 
 ## What you need
 
@@ -136,13 +140,14 @@ entry, and nothing is ever written to this inventory.
   you created one
 
 ### 4. Add the survey
-Open the template's **Survey** tab, add the two questions from
+Open the template's **Survey** tab, add the three questions from
 [aap/survey_spec.json](aap/survey_spec.json), and turn the survey **on**:
 
 | Question | Variable | Type | Required |
 |---|---|---|---|
 | Cluster name | `cluster_name` | Text | yes |
 | Which hosts in the cluster? | `target_group` | Multiple choice: `all`, `frontend`, `app`, `db` (default `all`) | no |
+| Seconds to wait for hosts to accept connections | `connect_timeout` | Integer, default `300` | no |
 
 Or load it with the API, from the repo root:
 
@@ -152,7 +157,7 @@ curl -k -H "Authorization: Bearer $AAP_TOKEN" -H "Content-Type: application/json
   -d @runtime/aap/survey_spec.json
 ```
 
-Leave `target_group` optional. AAP rejects API launches that leave out a
+Leave `target_group` and `connect_timeout` optional. AAP rejects API launches that leave out a
 required question, even when the question has a default.
 
 ### 5. Test it
@@ -182,18 +187,24 @@ On AWX or AAP 2.4 and earlier, use `/api/v2/...` instead of
 |---|---|
 | `cluster_name: cobalt` | runs on all 4 cobalt hosts |
 | `cluster_name: cobalt`, `target_group: frontend` | runs on `cobalt-fe01`, `cobalt-fe02` only |
-| `cluster_name: nope` | prints `Cluster nope not found. Nothing to do.`, job **succeeds** with no hosts |
+| `cluster_name: nope` | job **fails**: `Cluster nope not found in the cluster API.` |
 | no `cluster_name` | job **fails**: `Set cluster_name (survey or extra_vars).` |
+| a host that doesn't accept connections within `connect_timeout` | that host **fails** at `Wait for the host to accept connections`; the others carry on |
 
-To make an unknown cluster **fail** the job, add this after the "Parse the
-result" task in [playbook.yml](playbook.yml):
+### Launching right after building the cluster
 
-```yaml
-    - name: Fail if the cluster was not found
-      ansible.builtin.assert:
-        that: cluster_hosts | length > 0
-        fail_msg: "Cluster {{ cluster_name }} not found."
+When a pipeline builds the VMs (for example with Terraform) and launches
+this job straight away, the hosts may still be booting. The first task of
+play 2, `wait_for_connection`, retries each host until it accepts a
+connection, for up to `connect_timeout` seconds (default 300). Raise it in
+the launch if your VMs take longer to come up:
+
+```json
+{"extra_vars": {"cluster_name": "cobalt", "connect_timeout": 600}}
 ```
+
+To fail the whole job when any host never comes up, instead of carrying on
+with the ones that did, add `any_errors_fatal: true` to play 2.
 
 ## Day-2 processes
 
@@ -202,7 +213,7 @@ result" task in [playbook.yml](playbook.yml):
 | Host added | nothing | next job |
 | Host removed | nothing | next job |
 | Cluster added | nothing | next job |
-| Cluster removed | nothing; launches for it succeed with no hosts | next job |
+| Cluster removed | nothing; launches for it fail with `not found` | next job |
 
 A job that's already running keeps the host list it loaded at the start.
 
