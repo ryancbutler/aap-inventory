@@ -8,7 +8,7 @@
       "type": "multiplechoice",
       "choices": "all\nfrontend\napp\ndb",
       "default": "all",
-      "required": true
+      "required": false
     }
   ]
 }
