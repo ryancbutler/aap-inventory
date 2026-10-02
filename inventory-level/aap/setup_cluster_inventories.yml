@@ -1,0 +1,92 @@
+---
+# Creates one AAP inventory per cluster, each with an inventory source that
+# runs inventory/dynamic_inventory.py filtered to that cluster.
+#
+# The cluster list comes from the same script (no filter), so new clusters in
+# the API get an inventory the next time this runs.
+#
+# Run it as an AAP job template:
+#   - Playbook: inventory-level/aap/setup_cluster_inventories.yml
+#   - Credentials: a "Red Hat Ansible Automation Platform" credential (sets
+#     CONTROLLER_HOST / CONTROLLER_USERNAME / CONTROLLER_PASSWORD)
+#   - Execution environment: one with ansible.controller (AAP, e.g.
+#     ee-supported-rhel9) or awx.awx (AWX, e.g. the default AWX EE). The play
+#     uses short module names and finds them in whichever one is installed.
+#
+# Or locally, with ansible.controller or awx.awx installed:
+#   CONTROLLER_HOST=https://aap.example.com CONTROLLER_USERNAME=admin \
+#   CONTROLLER_PASSWORD=... ansible-playbook inventory-level/aap/setup_cluster_inventories.yml
+
+- name: Create one inventory per cluster
+  hosts: localhost
+  gather_facts: false
+  # Short module names below (inventory, inventory_source, ...) resolve from
+  # the first of these collections that's installed.
+  collections:
+    - ansible.controller
+    - awx.awx
+  vars:
+    organization: Default
+    project_name: aap-inventory             # Project pointing at this repo
+    inventory_prefix: "cluster-"            # inventories named cluster-<name>
+    # Path of the script relative to the root of the Git repo (the Project)
+    script_path: inventory-level/inventory/dynamic_inventory.py
+    sync_now: true
+
+  tasks:
+    - name: Ask the inventory script for every cluster
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/../inventory/dynamic_inventory.py"
+          - --list
+      register: all_inv
+      changed_when: false
+
+    - name: Get the cluster names
+      ansible.builtin.set_fact:
+        cluster_names: >-
+          {{ (all_inv.stdout | from_json)._meta.hostvars.values()
+             | map(attribute='cluster_name') | unique | sort }}
+
+    - name: Show what will be created
+      ansible.builtin.debug:
+        msg: "Clusters: {{ cluster_names }}"
+
+    - name: Create the inventory for each cluster
+      inventory:
+        name: "{{ inventory_prefix }}{{ item }}"
+        description: "Hosts for cluster {{ item }}, synced from the cluster API"
+        organization: "{{ organization }}"
+        state: present
+      loop: "{{ cluster_names }}"
+
+    - name: Add a source that runs the script for just that cluster
+      inventory_source:
+        name: "{{ item }}-api"
+        inventory: "{{ inventory_prefix }}{{ item }}"
+        organization: "{{ organization }}"
+        source: scm
+        source_project: "{{ project_name }}"
+        source_path: "{{ script_path }}"
+        source_vars:
+          INV_CLUSTER: "{{ item }}"
+        # Overwrite deletes hosts and groups that the API no longer returns,
+        # so a removed host disappears from the inventory on the next sync.
+        overwrite: true
+        overwrite_vars: true
+        # Re-sync before each job that uses this inventory, but at most once
+        # every 5 minutes.
+        update_on_launch: true
+        update_cache_timeout: 300
+        state: present
+      loop: "{{ cluster_names }}"
+
+    - name: Sync each inventory now
+      inventory_source_update:
+        name: "{{ item }}-api"
+        inventory: "{{ inventory_prefix }}{{ item }}"
+        organization: "{{ organization }}"
+        wait: true
+      loop: "{{ cluster_names }}"
+      when: sync_now | bool

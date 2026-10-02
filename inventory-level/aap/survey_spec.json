@@ -1,0 +1,14 @@
+{
+  "name": "Cluster role survey",
+  "description": "The cluster is chosen by the inventory; this only picks which hosts in it",
+  "spec": [
+    {
+      "question_name": "Which hosts in the cluster?",
+      "variable": "target_group",
+      "type": "multiplechoice",
+      "choices": "all\nfrontend\napp\ndb",
+      "default": "all",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+---
+# Run against ONE cluster, chosen at launch (survey, UI, or API).
+#
+# Launch from the AAP API:
+#   POST /api/controller/v2/job_templates/<id>/launch/
+#   {"extra_vars": {"cluster_name": "bravo", "target_group": "frontend"}}
+#
+# Extra vars:
+#   cluster_name  REQUIRED. Exact cluster name, e.g. atlas
+#   target_group  all | frontend | app | db   (default: all)
+#
+# How it works: play 1 runs the inventory script on the execution
+# environment with INV_CLUSTER=<cluster_name>, so the script only returns
+# that cluster. Those hosts are added to this run with add_host. If the
+# cluster doesn't exist, the script returns nothing, no hosts are added,
+# and play 2 is skipped.
+
+- name: Load hosts for the requested cluster
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require a cluster name
+      ansible.builtin.assert:
+        that: cluster_name is defined and cluster_name | length > 0
+        fail_msg: "Set cluster_name (survey or extra_vars)."
+        quiet: true
+
+    - name: Query the inventory script for just this cluster
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/inventory/dynamic_inventory.py"
+          - --list
+      environment:
+        INV_CLUSTER: "{{ cluster_name }}"
+      register: inv_out
+      changed_when: false
+
+    - name: Parse the result
+      ansible.builtin.set_fact:
+        cluster_hosts: "{{ (inv_out.stdout | from_json)._meta.hostvars }}"
+
+    - name: Report what was found
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Cluster ' ~ cluster_name ~ ': ' ~ (cluster_hosts | length) ~ ' hosts'
+             if cluster_hosts else
+             'Cluster ' ~ cluster_name ~ ' not found. Nothing to do.' }}
+
+    - name: Add the cluster's hosts to this run
+      ansible.builtin.add_host:
+        name: "{{ item.key }}"
+        groups:
+          - target_cluster
+          - "{{ item.value.role }}"
+        ansible_connection: "{{ item.value.ansible_connection }}"
+        host_ip: "{{ item.value.host_ip }}"
+        role: "{{ item.value.role }}"
+        cluster_name: "{{ item.value.cluster_name }}"
+      loop: "{{ cluster_hosts | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      changed_when: false
+
+- name: Run against the cluster
+  hosts: "target_cluster:&{{ target_group | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Show each host
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} ({{ role }}, {{ host_ip }}) in cluster {{ cluster_name }}"
+
+    - name: Example frontend-only task
+      ansible.builtin.debug:
+        msg: "Would restart the web service on {{ inventory_hostname }}"
+      when: role == 'frontend'

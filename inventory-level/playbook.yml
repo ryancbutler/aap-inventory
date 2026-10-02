@@ -1,0 +1,26 @@
+---
+# Inventory-level version: the AAP inventory already contains exactly one
+# cluster (its inventory source sets INV_CLUSTER), so the playbook just runs
+# against what's in it. Pick the cluster by picking the inventory at launch:
+#
+#   POST /api/controller/v2/job_templates/<id>/launch/
+#   {"inventory": <cluster inventory id>, "extra_vars": {"target_group": "frontend"}}
+#
+# Extra vars:
+#   target_group  all | frontend | app | db   (default: all)
+#
+# If the cluster doesn't exist in the API, the inventory sync returns no
+# hosts and this play is skipped ("no hosts matched").
+
+- name: Run against the cluster in the selected inventory
+  hosts: "{{ target_group | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Show each host
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} ({{ role }}, {{ host_ip }}) in cluster {{ cluster_name }}"
+
+    - name: Example frontend-only task
+      ansible.builtin.debug:
+        msg: "Would restart the web service on {{ inventory_hostname }}"
+      when: role == 'frontend'
