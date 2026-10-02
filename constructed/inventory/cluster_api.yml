@@ -1,0 +1,12 @@
+# Config for the cluster_api inventory plugin in inventory_plugins/.
+# This is the file the all-clusters inventory source points at.
+#
+# The API URL and token come from CLUSTER_API_URL and CLUSTER_API_TOKEN,
+# which a custom credential on the inventory source injects. With no URL
+# set, the plugin reads the mock data in clusters.json.
+plugin: cluster_api
+
+# The demo has no real servers, so run everything locally. Delete this for
+# real hosts: the plugin already sets ansible_host from the API's IP.
+compose:
+  ansible_connection: "'local'"

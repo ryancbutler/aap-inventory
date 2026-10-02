@@ -1,0 +1,168 @@
+---
+# Builds the constructed approach in AAP:
+#
+#   1. Inventory clusters-source, with a source that runs the cluster_api
+#      inventory plugin (every cluster) and a schedule that re-syncs it.
+#   2. One constructed inventory per cluster, named constructed-<name>, whose
+#      only input is clusters-source and whose limit is cluster_<name>.
+#
+# The cluster API is called once per sync of clusters-source, no matter how
+# many clusters there are. The constructed inventories are filtered views of
+# it that AAP builds from its own database.
+#
+# The cluster list comes from the same plugin, so new clusters in the API get
+# a constructed inventory the next time this runs.
+#
+# Run it as an AAP job template:
+#   - Playbook: constructed/aap/setup_constructed_inventories.yml
+#   - Credentials: a "Red Hat Ansible Automation Platform" credential, plus
+#     the Cluster API credential if the API needs auth
+#   - Execution environment: one with ansible.controller (AAP, e.g.
+#     ee-supported-rhel9) or awx.awx (AWX, e.g. the default AWX EE). The play
+#     uses short module names and finds them in whichever one is installed.
+#
+# Or locally, with ansible.controller or awx.awx installed:
+#   CONTROLLER_HOST=https://aap.example.com CONTROLLER_USERNAME=admin \
+#   CONTROLLER_PASSWORD=... ansible-playbook constructed/aap/setup_constructed_inventories.yml
+
+- name: Create the source inventory and one constructed inventory per cluster
+  hosts: localhost
+  gather_facts: false
+  # Short module names below (inventory, inventory_source, ...) resolve from
+  # the first of these collections that's installed.
+  collections:
+    - ansible.controller
+    - awx.awx
+  vars:
+    organization: Default
+    project_name: aap-inventory             # Project pointing at this repo
+    source_inventory: clusters-source       # holds every cluster
+    constructed_prefix: "constructed-"      # constructed inventories named constructed-<name>
+    # Path of the plugin config relative to the root of the Git repo (the Project)
+    plugin_config_path: constructed/inventory/cluster_api.yml
+    # Name of the Cluster API credential, if the API needs auth
+    cluster_api_credential: ""
+    # How often clusters-source re-syncs from the API, in minutes
+    sync_every_minutes: 15
+    sync_now: true
+
+  tasks:
+    - name: Ask the plugin for every cluster
+      ansible.builtin.command:
+        argv:
+          - ansible-inventory
+          - -i
+          - "{{ playbook_dir }}/../inventory/cluster_api.yml"
+          # Loads the plugin from inventory_plugins/ next to the config,
+          # the same way AAP does during a sync.
+          - --playbook-dir
+          - "{{ playbook_dir }}/../inventory"
+          - --list
+          - --export
+          # YAML, because newer ansible-core marks values in its JSON output
+          # in a way from_json can't read.
+          - --yaml
+      register: all_inv
+      changed_when: false
+
+    - name: Get each cluster's group and name
+      ansible.builtin.set_fact:
+        cluster_groups: "{{ groups_found | map(attribute='key') | list }}"
+        cluster_names: "{{ groups_found | map(attribute='value.vars.cluster_name') | list }}"
+      vars:
+        groups_found: >-
+          {{ (all_inv.stdout | from_yaml).all.children | dict2items
+             | selectattr('key', 'match', '^cluster_') | sort(attribute='key') }}
+
+    - name: Show what will be created
+      ansible.builtin.debug:
+        msg: "Clusters: {{ cluster_names }}"
+
+    # 1. The source inventory: the only thing that calls the cluster API.
+
+    - name: Create the source inventory
+      inventory:
+        name: "{{ source_inventory }}"
+        description: "Every cluster, synced from the cluster API. Input to the constructed inventories."
+        organization: "{{ organization }}"
+        state: present
+
+    - name: Add a source that runs the cluster_api plugin
+      inventory_source:
+        name: "{{ source_inventory }}-api"
+        inventory: "{{ source_inventory }}"
+        organization: "{{ organization }}"
+        source: scm
+        source_project: "{{ project_name }}"
+        source_path: "{{ plugin_config_path }}"
+        credential: "{{ cluster_api_credential or omit }}"
+        # Overwrite deletes hosts and groups that the API no longer returns.
+        # The plugin fails the sync on any API error, so an outage can't
+        # empty the inventory.
+        overwrite: true
+        overwrite_vars: true
+        # Jobs run against the constructed inventories, and those only
+        # re-sync their own (constructed) source on launch, never this one.
+        # The schedule below keeps this one current instead.
+        update_on_launch: false
+        state: present
+      register: source
+
+    - name: Re-sync the source inventory on a schedule
+      schedule:
+        name: "{{ source_inventory }}-api every {{ sync_every_minutes }} min"
+        unified_job_template: "{{ source.id }}"
+        rrule: "DTSTART:20260101T000000Z RRULE:FREQ=MINUTELY;INTERVAL={{ sync_every_minutes }}"
+        state: present
+
+    - name: Sync the source inventory now
+      inventory_source_update:
+        name: "{{ source_inventory }}-api"
+        inventory: "{{ source_inventory }}"
+        organization: "{{ organization }}"
+        wait: true
+      when: sync_now | bool
+
+    # 2. One constructed inventory per cluster.
+
+    - name: Create the constructed inventory for each cluster
+      inventory:
+        name: "{{ constructed_prefix }}{{ item }}"
+        description: "Cluster {{ item }}, built from {{ source_inventory }}"
+        organization: "{{ organization }}"
+        kind: constructed
+        input_inventories:
+          - "{{ source_inventory }}"
+        state: present
+      loop: "{{ cluster_names }}"
+
+    - name: Limit each constructed inventory to its cluster
+      inventory_source:
+        # AAP creates this source with the inventory and always names it so.
+        name: "Auto-created source for: {{ constructed_prefix }}{{ item.0 }}"
+        inventory: "{{ constructed_prefix }}{{ item.0 }}"
+        organization: "{{ organization }}"
+        limit: "{{ item.1 }}"
+        source_vars:
+          plugin: constructed
+          strict: true
+        overwrite: true
+        overwrite_vars: true
+        # Rebuild from the source inventory before every job. This reads
+        # AAP's database only, so it's cheap, and picks up the latest
+        # scheduled sync.
+        update_on_launch: true
+        update_cache_timeout: 0
+        state: present
+      loop: "{{ cluster_names | zip(cluster_groups) | list }}"
+      loop_control:
+        label: "{{ item.0 }} -> {{ item.1 }}"
+
+    - name: Build each constructed inventory now
+      inventory_source_update:
+        name: "Auto-created source for: {{ constructed_prefix }}{{ item }}"
+        inventory: "{{ constructed_prefix }}{{ item }}"
+        organization: "{{ organization }}"
+        wait: true
+      loop: "{{ cluster_names }}"
+      when: sync_now | bool
