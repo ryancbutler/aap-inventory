@@ -106,12 +106,12 @@
         # The schedule below keeps this one current instead.
         update_on_launch: false
         state: present
-      register: source
 
     - name: Re-sync the source inventory on a schedule
       schedule:
         name: "{{ source_inventory }}-api every {{ sync_every_minutes }} min"
-        unified_job_template: "{{ source.id }}"
+        # Looked up by name only, so keep source names unique across AAP.
+        unified_job_template: "{{ source_inventory }}-api"
         rrule: "DTSTART:20260101T000000Z RRULE:FREQ=MINUTELY;INTERVAL={{ sync_every_minutes }}"
         state: present
 
