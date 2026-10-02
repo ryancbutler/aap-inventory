@@ -1,0 +1,254 @@
+{
+  "clusters": [
+    {
+      "name": "atlas",
+      "hosts": [
+        {
+          "hostname": "atlas-fe01",
+          "role": "frontend",
+          "ip": "10.1.0.11"
+        },
+        {
+          "hostname": "atlas-fe02",
+          "role": "frontend",
+          "ip": "10.1.0.12"
+        },
+        {
+          "hostname": "atlas-app01",
+          "role": "app",
+          "ip": "10.1.0.21"
+        },
+        {
+          "hostname": "atlas-db01",
+          "role": "db",
+          "ip": "10.1.0.31"
+        }
+      ]
+    },
+    {
+      "name": "boreal",
+      "hosts": [
+        {
+          "hostname": "boreal-fe01",
+          "role": "frontend",
+          "ip": "10.2.0.11"
+        },
+        {
+          "hostname": "boreal-fe02",
+          "role": "frontend",
+          "ip": "10.2.0.12"
+        },
+        {
+          "hostname": "boreal-app01",
+          "role": "app",
+          "ip": "10.2.0.21"
+        },
+        {
+          "hostname": "boreal-db01",
+          "role": "db",
+          "ip": "10.2.0.31"
+        }
+      ]
+    },
+    {
+      "name": "cobalt",
+      "hosts": [
+        {
+          "hostname": "cobalt-fe01",
+          "role": "frontend",
+          "ip": "10.3.0.11"
+        },
+        {
+          "hostname": "cobalt-fe02",
+          "role": "frontend",
+          "ip": "10.3.0.12"
+        },
+        {
+          "hostname": "cobalt-app01",
+          "role": "app",
+          "ip": "10.3.0.21"
+        },
+        {
+          "hostname": "cobalt-db01",
+          "role": "db",
+          "ip": "10.3.0.31"
+        }
+      ]
+    },
+    {
+      "name": "delta",
+      "hosts": [
+        {
+          "hostname": "delta-fe01",
+          "role": "frontend",
+          "ip": "10.4.0.11"
+        },
+        {
+          "hostname": "delta-fe02",
+          "role": "frontend",
+          "ip": "10.4.0.12"
+        },
+        {
+          "hostname": "delta-app01",
+          "role": "app",
+          "ip": "10.4.0.21"
+        },
+        {
+          "hostname": "delta-db01",
+          "role": "db",
+          "ip": "10.4.0.31"
+        }
+      ]
+    },
+    {
+      "name": "ember",
+      "hosts": [
+        {
+          "hostname": "ember-fe01",
+          "role": "frontend",
+          "ip": "10.5.0.11"
+        },
+        {
+          "hostname": "ember-fe02",
+          "role": "frontend",
+          "ip": "10.5.0.12"
+        },
+        {
+          "hostname": "ember-app01",
+          "role": "app",
+          "ip": "10.5.0.21"
+        },
+        {
+          "hostname": "ember-db01",
+          "role": "db",
+          "ip": "10.5.0.31"
+        }
+      ]
+    },
+    {
+      "name": "falcon",
+      "hosts": [
+        {
+          "hostname": "falcon-fe01",
+          "role": "frontend",
+          "ip": "10.6.0.11"
+        },
+        {
+          "hostname": "falcon-fe02",
+          "role": "frontend",
+          "ip": "10.6.0.12"
+        },
+        {
+          "hostname": "falcon-app01",
+          "role": "app",
+          "ip": "10.6.0.21"
+        },
+        {
+          "hostname": "falcon-db01",
+          "role": "db",
+          "ip": "10.6.0.31"
+        }
+      ]
+    },
+    {
+      "name": "granite",
+      "hosts": [
+        {
+          "hostname": "granite-fe01",
+          "role": "frontend",
+          "ip": "10.7.0.11"
+        },
+        {
+          "hostname": "granite-fe02",
+          "role": "frontend",
+          "ip": "10.7.0.12"
+        },
+        {
+          "hostname": "granite-app01",
+          "role": "app",
+          "ip": "10.7.0.21"
+        },
+        {
+          "hostname": "granite-db01",
+          "role": "db",
+          "ip": "10.7.0.31"
+        }
+      ]
+    },
+    {
+      "name": "harbor",
+      "hosts": [
+        {
+          "hostname": "harbor-fe01",
+          "role": "frontend",
+          "ip": "10.8.0.11"
+        },
+        {
+          "hostname": "harbor-fe02",
+          "role": "frontend",
+          "ip": "10.8.0.12"
+        },
+        {
+          "hostname": "harbor-app01",
+          "role": "app",
+          "ip": "10.8.0.21"
+        },
+        {
+          "hostname": "harbor-db01",
+          "role": "db",
+          "ip": "10.8.0.31"
+        }
+      ]
+    },
+    {
+      "name": "ion",
+      "hosts": [
+        {
+          "hostname": "ion-fe01",
+          "role": "frontend",
+          "ip": "10.9.0.11"
+        },
+        {
+          "hostname": "ion-fe02",
+          "role": "frontend",
+          "ip": "10.9.0.12"
+        },
+        {
+          "hostname": "ion-app01",
+          "role": "app",
+          "ip": "10.9.0.21"
+        },
+        {
+          "hostname": "ion-db01",
+          "role": "db",
+          "ip": "10.9.0.31"
+        }
+      ]
+    },
+    {
+      "name": "juniper",
+      "hosts": [
+        {
+          "hostname": "juniper-fe01",
+          "role": "frontend",
+          "ip": "10.10.0.11"
+        },
+        {
+          "hostname": "juniper-fe02",
+          "role": "frontend",
+          "ip": "10.10.0.12"
+        },
+        {
+          "hostname": "juniper-app01",
+          "role": "app",
+          "ip": "10.10.0.21"
+        },
+        {
+          "hostname": "juniper-db01",
+          "role": "db",
+          "ip": "10.10.0.31"
+        }
+      ]
+    }
+  ]
+}

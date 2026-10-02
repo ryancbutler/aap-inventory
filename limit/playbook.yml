@@ -1,0 +1,54 @@
+---
+# Limit version: the AAP inventory holds every cluster, and the job's limit
+# picks one. Each cluster is a group named cluster_<name>:
+#
+#   POST /api/controller/v2/job_templates/<id>/launch/
+#   {"limit": "cluster_cobalt", "extra_vars": {"target_group": "frontend"}}
+#
+# Extra vars:
+#   target_group  all | frontend | app | db   (default: all)
+#
+# The first two tasks stop the whole job unless the limit selects hosts from
+# exactly one cluster. Without them, a launch with no limit would run on
+# every host in every cluster.
+#
+# If the limit matches no hosts (e.g. cluster_nope), ansible-playbook exits
+# with "Specified hosts and/or --limit does not match any hosts" and the job
+# fails before any task runs.
+
+- name: Run against the cluster selected by the limit
+  hosts: "{{ target_group | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Require a limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined and ansible_limit | length > 0
+        fail_msg: >-
+          No limit set. Launch with a limit such as cluster_cobalt, or this
+          would run on every cluster.
+        quiet: true
+      run_once: true
+
+    - name: Require the limit to select exactly one cluster
+      ansible.builtin.assert:
+        that: targeted_clusters | length == 1
+        fail_msg: >-
+          Limit '{{ ansible_limit }}' selects {{ targeted_clusters | length }}
+          clusters ({{ targeted_clusters | join(', ') }}). Use one, e.g.
+          cluster_cobalt.
+        quiet: true
+      vars:
+        targeted_clusters: >-
+          {{ ansible_play_hosts_all | map('extract', hostvars, 'cluster_name')
+             | unique | sort }}
+      run_once: true
+
+    - name: Show each host
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} ({{ role }}, {{ host_ip }}) in cluster {{ cluster_name }}"
+
+    - name: Example frontend-only task
+      ansible.builtin.debug:
+        msg: "Would restart the web service on {{ inventory_hostname }}"
+      when: role == 'frontend'
