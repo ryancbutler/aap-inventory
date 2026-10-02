@@ -13,8 +13,8 @@
 # every host in every cluster.
 #
 # If the limit matches no hosts (e.g. cluster_nope), ansible-playbook exits
-# with "Specified hosts and/or --limit does not match any hosts" and the job
-# fails before any task runs.
+# with "...--limit leaves us with no hosts to target" and the job fails
+# before any task runs.
 
 - name: Run against the cluster selected by the limit
   hosts: "{{ target_group | default('all') }}"
